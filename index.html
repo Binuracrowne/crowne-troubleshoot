@@ -6,16 +6,18 @@
   <title>Crowne Plaza Canberra - Troubleshooting</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
     .header { background: #1a365d; color: white; padding: 15px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
     .card { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     button { background: #2b6cb0; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin: 5px; }
     button:hover { background: #2c5282; }
-    input { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    button.admin { background: #c05621; }
+    input, textarea, select { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     .hidden { display: none; }
     img, video { max-width: 100%; height: auto; margin: 10px 0; border-radius: 8px; }
     .step { border-left: 4px solid #2b6cb0; padding-left: 15px; margin: 15px 0; }
     #status { color: red; margin: 10px 0; min-height: 20px; }
+    .admin-panel { background: #fff3cd; border: 1px solid #ffeaa7; }
   </style>
 </head>
 <body>
@@ -39,14 +41,17 @@
     <div class="card">
       <button id="logout-btn">Logout</button>
       <span id="user-email"></span>
+      <button id="admin-btn" class="admin hidden">Admin Panel</button>
     </div>
     <div id="content"></div>
+    <div id="admin-section" class="hidden"></div>
   </div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const SUPABASE_URL = 'https://yiupaxvpijwrlknvfvac.supabase.co';
       const SUPABASE_KEY = 'sb_publishable_UN3001se-JLCxRwFRchpJA_sdRgVs9q';
+      const ADMIN_EMAIL = 'binura.jayawardhana@ihg.com';
 
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       let currentUser = null;
@@ -56,17 +61,14 @@
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
         statusEl.textContent = 'Logging in...';
-
         if (!email || !password) {
           statusEl.textContent = 'Please enter email and password';
           return;
         }
-
         try {
           const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-          if (error) {
-            statusEl.textContent = 'Login failed: ' + error.message;
-          } else {
+          if (error) statusEl.textContent = 'Login failed: ' + error.message;
+          else {
             currentUser = data.user;
             showApp();
           }
@@ -83,15 +85,21 @@
         statusEl.textContent = '';
       });
 
+      document.getElementById('admin-btn').addEventListener('click', showAdmin);
+
       function showApp() {
         document.getElementById('login-section').classList.add('hidden');
         document.getElementById('app-section').classList.remove('hidden');
         document.getElementById('user-email').textContent = 'Logged in as: ' + currentUser.email;
+        if (currentUser.email === ADMIN_EMAIL) {
+          document.getElementById('admin-btn').classList.remove('hidden');
+        }
         statusEl.textContent = '';
         loadCategories();
       }
 
       async function loadCategories() {
+        document.getElementById('admin-section').classList.add('hidden');
         const { data, error } = await supabase.from('categories').select('*').order('sort_order');
         if (error) {
           document.getElementById('content').innerHTML = '<p>Error: ' + error.message + '</p>';
@@ -121,11 +129,9 @@
         const { data: issue } = await supabase.from('issues').select('*').eq('id', issueId).single();
         const { data: steps, error } = await supabase.from('steps').select('*').eq('issue_id', issueId).order('step_number');
         if (error) return alert(error.message);
-
         let html = `<button onclick="window.loadIssues(${issue.category_id})">← Back</button>
                     <h2>${issue.title}</h2>
                     <p>${issue.description || ''}</p>`;
-
         steps.forEach(step => {
           html += `<div class="step">
             <h3>Step ${step.step_number}</h3>
@@ -139,13 +145,113 @@
           }
           html += `</div>`;
         });
-
         document.getElementById('content').innerHTML = html;
       };
 
       window.loadCategories = loadCategories;
 
-      // Check existing session
+      function showAdmin() {
+        document.getElementById('content').innerHTML = '';
+        const adminSection = document.getElementById('admin-section');
+        adminSection.classList.remove('hidden');
+        adminSection.innerHTML = `
+          <div class="card admin-panel">
+            <h2>Admin Panel</h2>
+            <h3>Add Category</h3>
+            <input id="new-cat-name" placeholder="Category name">
+            <button onclick="window.addCategory()">Add Category</button>
+
+            <h3>Add Issue</h3>
+            <select id="issue-category"></select>
+            <input id="new-issue-title" placeholder="Issue title">
+            <textarea id="new-issue-desc" placeholder="Short description (optional)"></textarea>
+            <button onclick="window.addIssue()">Add Issue</button>
+
+            <h3>Add Step</h3>
+            <select id="step-issue"></select>
+            <input id="step-number" type="number" placeholder="Step number">
+            <textarea id="step-instruction" placeholder="Instruction"></textarea>
+            <input type="file" id="step-media" accept="image/*,video/*">
+            <button onclick="window.addStep()">Add Step</button>
+          </div>
+        `;
+        loadAdminDropdowns();
+      }
+
+      async function loadAdminDropdowns() {
+        const { data: cats } = await supabase.from('categories').select('id, name');
+        const catSelect = document.getElementById('issue-category');
+        catSelect.innerHTML = cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+        const { data: issues } = await supabase.from('issues').select('id, title');
+        const issueSelect = document.getElementById('step-issue');
+        issueSelect.innerHTML = issues.map(i => `<option value="${i.id}">${i.title}</option>`).join('');
+      }
+
+      window.addCategory = async function () {
+        const name = document.getElementById('new-cat-name').value.trim();
+        if (!name) return alert('Enter a name');
+        const { error } = await supabase.from('categories').insert({ name });
+        if (error) alert(error.message);
+        else {
+          alert('Category added');
+          document.getElementById('new-cat-name').value = '';
+          loadAdminDropdowns();
+          loadCategories();
+        }
+      };
+
+      window.addIssue = async function () {
+        const category_id = document.getElementById('issue-category').value;
+        const title = document.getElementById('new-issue-title').value.trim();
+        const description = document.getElementById('new-issue-desc').value.trim();
+        if (!title) return alert('Enter a title');
+        const { error } = await supabase.from('issues').insert({ category_id, title, description });
+        if (error) alert(error.message);
+        else {
+          alert('Issue added');
+          document.getElementById('new-issue-title').value = '';
+          document.getElementById('new-issue-desc').value = '';
+          loadAdminDropdowns();
+        }
+      };
+
+      window.addStep = async function () {
+        const issue_id = document.getElementById('step-issue').value;
+        const step_number = parseInt(document.getElementById('step-number').value);
+        const instruction = document.getElementById('step-instruction').value.trim();
+        const fileInput = document.getElementById('step-media');
+        if (!instruction || !step_number) return alert('Fill step number and instruction');
+
+        let media_url = null;
+        let media_type = null;
+
+        if (fileInput.files.length > 0) {
+          const file = fileInput.files[0];
+          const fileName = `${Date.now()}_${file.name}`;
+          const { data, error: uploadError } = await supabase.storage
+            .from('troubleshooting-media')
+            .upload(fileName, file);
+          if (uploadError) return alert('Upload failed: ' + uploadError.message);
+          const { data: urlData } = supabase.storage
+            .from('troubleshooting-media')
+            .getPublicUrl(fileName);
+          media_url = urlData.publicUrl;
+          media_type = file.type.startsWith('video') ? 'video' : 'image';
+        }
+
+        const { error } = await supabase.from('steps').insert({
+          issue_id, step_number, instruction, media_url, media_type
+        });
+        if (error) alert(error.message);
+        else {
+          alert('Step added');
+          document.getElementById('step-number').value = '';
+          document.getElementById('step-instruction').value = '';
+          fileInput.value = '';
+        }
+      };
+
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) {
           currentUser = user;
