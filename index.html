@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crowne Plaza Canberra - Troubleshooting</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+    .header { background: #1a365d; color: white; padding: 15px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
+    .card { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    button { background: #2b6cb0; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin: 5px; }
+    button:hover { background: #2c5282; }
+    input, textarea { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    .hidden { display: none; }
+    img, video { max-width: 100%; height: auto; margin: 10px 0; border-radius: 8px; }
+    .step { border-left: 4px solid #2b6cb0; padding-left: 15px; margin: 15px 0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Crowne Plaza Canberra</h1>
+    <p>After Hours Troubleshooting Guide</p>
+  </div>
+
+  <div id="login-section">
+    <div class="card">
+      <h2>Login</h2>
+      <input type="email" id="email" placeholder="Your email">
+      <input type="password" id="password" placeholder="Password">
+      <button onclick="login()">Login</button>
+    </div>
+  </div>
+
+  <div id="app-section" class="hidden">
+    <div class="card">
+      <button onclick="logout()">Logout</button>
+      <span id="user-email"></span>
+    </div>
+    <div id="content"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://yiupaxvpijwrlknvfvac.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_UN3001se-JLCxRwFRchpJA_sdRgVs9q';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentUser = null;
+
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        currentUser = user;
+        showApp();
+      }
+    }
+
+    async function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        alert('Login failed: ' + error.message);
+      } else {
+        currentUser = data.user;
+        showApp();
+      }
+    }
+
+    async function logout() {
+      await supabase.auth.signOut();
+      currentUser = null;
+      document.getElementById('login-section').classList.remove('hidden');
+      document.getElementById('app-section').classList.add('hidden');
+    }
+
+    function showApp() {
+      document.getElementById('login-section').classList.add('hidden');
+      document.getElementById('app-section').classList.remove('hidden');
+      document.getElementById('user-email').textContent = 'Logged in as: ' + currentUser.email;
+      loadCategories();
+    }
+
+    async function loadCategories() {
+      const { data, error } = await supabase.from('categories').select('*').order('sort_order');
+      if (error) return alert(error.message);
+      let html = '<h2>Categories</h2>';
+      data.forEach(cat => {
+        html += `<div class="card"><button onclick="loadIssues(${cat.id})">${cat.name}</button></div>`;
+      });
+      document.getElementById('content').innerHTML = html;
+    }
+
+    async function loadIssues(categoryId) {
+      const { data, error } = await supabase.from('issues').select('*').eq('category_id', categoryId).order('sort_order');
+      if (error) return alert(error.message);
+      let html = '<button onclick="loadCategories()">← Back to Categories</button><h2>Issues</h2>';
+      data.forEach(issue => {
+        html += `<div class="card"><button onclick="loadSteps(${issue.id})">${issue.title}</button></div>`;
+      });
+      document.getElementById('content').innerHTML = html;
+    }
+
+    async function loadSteps(issueId) {
+      const { data: issue } = await supabase.from('issues').select('*').eq('id', issueId).single();
+      const { data: steps, error } = await supabase.from('steps').select('*').eq('issue_id', issueId).order('step_number');
+      if (error) return alert(error.message);
+
+      let html = `<button onclick="loadIssues(${issue.category_id})">← Back</button>
+                  <h2>${issue.title}</h2>
+                  <p>${issue.description || ''}</p>`;
+
+      steps.forEach(step => {
+        html += `<div class="step">
+          <h3>Step ${step.step_number}</h3>
+          <p>${step.instruction}</p>`;
+        if (step.media_url) {
+          if (step.media_type === 'video') {
+            html += `<video controls width="100%"><source src="${step.media_url}" type="video/mp4"></video>`;
+          } else {
+            html += `<img src="${step.media_url}" alt="Step image">`;
+          }
+        }
+        html += `</div>`;
+      });
+
+      document.getElementById('content').innerHTML = html;
+    }
+
+    checkAuth();
+  </script>
+</body>
+</html>
