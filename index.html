@@ -11,10 +11,11 @@
     .card { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     button { background: #2b6cb0; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin: 5px; }
     button:hover { background: #2c5282; }
-    input, textarea { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    input { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     .hidden { display: none; }
     img, video { max-width: 100%; height: auto; margin: 10px 0; border-radius: 8px; }
     .step { border-left: 4px solid #2b6cb0; padding-left: 15px; margin: 15px 0; }
+    #status { color: red; margin: 10px 0; }
   </style>
 </head>
 <body>
@@ -23,18 +24,20 @@
     <p>After Hours Troubleshooting Guide</p>
   </div>
 
+  <div id="status"></div>
+
   <div id="login-section">
     <div class="card">
       <h2>Login</h2>
       <input type="email" id="email" placeholder="Your email">
       <input type="password" id="password" placeholder="Password">
-      <button onclick="login()">Login</button>
+      <button id="login-btn">Login</button>
     </div>
   </div>
 
   <div id="app-section" class="hidden">
     <div class="card">
-      <button onclick="logout()">Logout</button>
+      <button id="logout-btn">Logout</button>
       <span id="user-email"></span>
     </div>
     <div id="content"></div>
@@ -43,48 +46,59 @@
   <script>
     const SUPABASE_URL = 'https://yiupaxvpijwrlknvfvac.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_UN3001se-JLCxRwFRchpJA_sdRgVs9q';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let supabase;
+    try {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+      document.getElementById('status').textContent = 'Failed to load Supabase: ' + e.message;
+    }
 
     let currentUser = null;
 
-    async function checkAuth() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        currentUser = user;
-        showApp();
-      }
-    }
-
-    async function login() {
-      const email = document.getElementById('email').value;
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
+      document.getElementById('status').textContent = 'Logging in...';
+
+      if (!email || !password) {
+        document.getElementById('status').textContent = 'Please enter email and password';
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        alert('Login failed: ' + error.message);
+        document.getElementById('status').textContent = 'Login failed: ' + error.message;
       } else {
         currentUser = data.user;
         showApp();
       }
-    }
+    });
 
-    async function logout() {
+    document.getElementById('logout-btn').addEventListener('click', async () => {
       await supabase.auth.signOut();
       currentUser = null;
       document.getElementById('login-section').classList.remove('hidden');
       document.getElementById('app-section').classList.add('hidden');
-    }
+      document.getElementById('status').textContent = '';
+    });
 
     function showApp() {
       document.getElementById('login-section').classList.add('hidden');
       document.getElementById('app-section').classList.remove('hidden');
       document.getElementById('user-email').textContent = 'Logged in as: ' + currentUser.email;
+      document.getElementById('status').textContent = '';
       loadCategories();
     }
 
     async function loadCategories() {
       const { data, error } = await supabase.from('categories').select('*').order('sort_order');
-      if (error) return alert(error.message);
+      if (error) {
+        document.getElementById('content').innerHTML = '<p>Error loading categories: ' + error.message + '</p>';
+        return;
+      }
       let html = '<h2>Categories</h2>';
+      if (data.length === 0) html += '<p>No categories yet. Admin needs to add some.</p>';
       data.forEach(cat => {
         html += `<div class="card"><button onclick="loadIssues(${cat.id})">${cat.name}</button></div>`;
       });
@@ -127,7 +141,13 @@
       document.getElementById('content').innerHTML = html;
     }
 
-    checkAuth();
+    // Check if already logged in
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        currentUser = user;
+        showApp();
+      }
+    });
   </script>
 </body>
 </html>
