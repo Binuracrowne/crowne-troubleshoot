@@ -15,7 +15,7 @@
     .hidden { display: none; }
     img, video { max-width: 100%; height: auto; margin: 10px 0; border-radius: 8px; }
     .step { border-left: 4px solid #2b6cb0; padding-left: 15px; margin: 15px 0; }
-    #status { color: red; margin: 10px 0; }
+    #status { color: red; margin: 10px 0; min-height: 20px; }
   </style>
 </head>
 <body>
@@ -44,109 +44,114 @@
   </div>
 
   <script>
-    const SUPABASE_URL = 'https://yiupaxvpijwrlknvfvac.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_UN3001se-JLCxRwFRchpJA_sdRgVs9q';
+    document.addEventListener('DOMContentLoaded', function () {
+      const SUPABASE_URL = 'https://yiupaxvpijwrlknvfvac.supabase.co';
+      const SUPABASE_KEY = 'sb_publishable_UN3001se-JLCxRwFRchpJA_sdRgVs9q';
 
-    let supabase;
-    try {
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    } catch (e) {
-      document.getElementById('status').textContent = 'Failed to load Supabase: ' + e.message;
-    }
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      let currentUser = null;
+      const statusEl = document.getElementById('status');
 
-    let currentUser = null;
+      document.getElementById('login-btn').addEventListener('click', async function () {
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        statusEl.textContent = 'Logging in...';
 
-    document.getElementById('login-btn').addEventListener('click', async () => {
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
-      document.getElementById('status').textContent = 'Logging in...';
-
-      if (!email || !password) {
-        document.getElementById('status').textContent = 'Please enter email and password';
-        return;
-      }
-
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        document.getElementById('status').textContent = 'Login failed: ' + error.message;
-      } else {
-        currentUser = data.user;
-        showApp();
-      }
-    });
-
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      await supabase.auth.signOut();
-      currentUser = null;
-      document.getElementById('login-section').classList.remove('hidden');
-      document.getElementById('app-section').classList.add('hidden');
-      document.getElementById('status').textContent = '';
-    });
-
-    function showApp() {
-      document.getElementById('login-section').classList.add('hidden');
-      document.getElementById('app-section').classList.remove('hidden');
-      document.getElementById('user-email').textContent = 'Logged in as: ' + currentUser.email;
-      document.getElementById('status').textContent = '';
-      loadCategories();
-    }
-
-    async function loadCategories() {
-      const { data, error } = await supabase.from('categories').select('*').order('sort_order');
-      if (error) {
-        document.getElementById('content').innerHTML = '<p>Error loading categories: ' + error.message + '</p>';
-        return;
-      }
-      let html = '<h2>Categories</h2>';
-      if (data.length === 0) html += '<p>No categories yet. Admin needs to add some.</p>';
-      data.forEach(cat => {
-        html += `<div class="card"><button onclick="loadIssues(${cat.id})">${cat.name}</button></div>`;
-      });
-      document.getElementById('content').innerHTML = html;
-    }
-
-    async function loadIssues(categoryId) {
-      const { data, error } = await supabase.from('issues').select('*').eq('category_id', categoryId).order('sort_order');
-      if (error) return alert(error.message);
-      let html = '<button onclick="loadCategories()">← Back to Categories</button><h2>Issues</h2>';
-      data.forEach(issue => {
-        html += `<div class="card"><button onclick="loadSteps(${issue.id})">${issue.title}</button></div>`;
-      });
-      document.getElementById('content').innerHTML = html;
-    }
-
-    async function loadSteps(issueId) {
-      const { data: issue } = await supabase.from('issues').select('*').eq('id', issueId).single();
-      const { data: steps, error } = await supabase.from('steps').select('*').eq('issue_id', issueId).order('step_number');
-      if (error) return alert(error.message);
-
-      let html = `<button onclick="loadIssues(${issue.category_id})">← Back</button>
-                  <h2>${issue.title}</h2>
-                  <p>${issue.description || ''}</p>`;
-
-      steps.forEach(step => {
-        html += `<div class="step">
-          <h3>Step ${step.step_number}</h3>
-          <p>${step.instruction}</p>`;
-        if (step.media_url) {
-          if (step.media_type === 'video') {
-            html += `<video controls width="100%"><source src="${step.media_url}" type="video/mp4"></video>`;
-          } else {
-            html += `<img src="${step.media_url}" alt="Step image">`;
-          }
+        if (!email || !password) {
+          statusEl.textContent = 'Please enter email and password';
+          return;
         }
-        html += `</div>`;
+
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) {
+            statusEl.textContent = 'Login failed: ' + error.message;
+          } else {
+            currentUser = data.user;
+            showApp();
+          }
+        } catch (err) {
+          statusEl.textContent = 'Error: ' + err.message;
+        }
       });
 
-      document.getElementById('content').innerHTML = html;
-    }
+      document.getElementById('logout-btn').addEventListener('click', async function () {
+        await supabase.auth.signOut();
+        currentUser = null;
+        document.getElementById('login-section').classList.remove('hidden');
+        document.getElementById('app-section').classList.add('hidden');
+        statusEl.textContent = '';
+      });
 
-    // Check if already logged in
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        currentUser = user;
-        showApp();
+      function showApp() {
+        document.getElementById('login-section').classList.add('hidden');
+        document.getElementById('app-section').classList.remove('hidden');
+        document.getElementById('user-email').textContent = 'Logged in as: ' + currentUser.email;
+        statusEl.textContent = '';
+        loadCategories();
       }
+
+      async function loadCategories() {
+        const { data, error } = await supabase.from('categories').select('*').order('sort_order');
+        if (error) {
+          document.getElementById('content').innerHTML = '<p>Error: ' + error.message + '</p>';
+          return;
+        }
+        let html = '<h2>Categories</h2>';
+        if (!data || data.length === 0) html += '<p>No categories yet.</p>';
+        else {
+          data.forEach(cat => {
+            html += `<div class="card"><button onclick="window.loadIssues(${cat.id})">${cat.name}</button></div>`;
+          });
+        }
+        document.getElementById('content').innerHTML = html;
+      }
+
+      window.loadIssues = async function (categoryId) {
+        const { data, error } = await supabase.from('issues').select('*').eq('category_id', categoryId).order('sort_order');
+        if (error) return alert(error.message);
+        let html = '<button onclick="window.loadCategories()">← Back to Categories</button><h2>Issues</h2>';
+        data.forEach(issue => {
+          html += `<div class="card"><button onclick="window.loadSteps(${issue.id})">${issue.title}</button></div>`;
+        });
+        document.getElementById('content').innerHTML = html;
+      };
+
+      window.loadSteps = async function (issueId) {
+        const { data: issue } = await supabase.from('issues').select('*').eq('id', issueId).single();
+        const { data: steps, error } = await supabase.from('steps').select('*').eq('issue_id', issueId).order('step_number');
+        if (error) return alert(error.message);
+
+        let html = `<button onclick="window.loadIssues(${issue.category_id})">← Back</button>
+                    <h2>${issue.title}</h2>
+                    <p>${issue.description || ''}</p>`;
+
+        steps.forEach(step => {
+          html += `<div class="step">
+            <h3>Step ${step.step_number}</h3>
+            <p>${step.instruction}</p>`;
+          if (step.media_url) {
+            if (step.media_type === 'video') {
+              html += `<video controls width="100%"><source src="${step.media_url}" type="video/mp4"></video>`;
+            } else {
+              html += `<img src="${step.media_url}" alt="Step image">`;
+            }
+          }
+          html += `</div>`;
+        });
+
+        document.getElementById('content').innerHTML = html;
+      };
+
+      window.loadCategories = loadCategories;
+
+      // Check existing session
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          currentUser = user;
+          showApp();
+        }
+      });
     });
   </script>
 </body>
